@@ -13,9 +13,10 @@ object NotificationHelper {
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
-        val notificationManager = context.getSystemService(NotificationManager::class.java)
-        if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) return
-
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        android.util.Log.d("NotificationHelper", "Ensuring notification channel exists: $CHANNEL_ID")
+        
         val channel = NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
@@ -23,8 +24,23 @@ object NotificationHelper {
         ).apply {
             description = CHANNEL_DESCRIPTION
             enableVibration(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            setBypassDnd(true) // Added to help alarm behavior
         }
 
         notificationManager.createNotificationChannel(channel)
+        android.util.Log.d("NotificationHelper", "Notification channel configuration completed")
+    }
+
+    /**
+     * Call this if you suspect the channel importance was downgraded by the system/user
+     * and you need to force-reset it for debugging.
+     */
+    fun recreateNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        android.util.Log.w("NotificationHelper", "Force-recreating channel: $CHANNEL_ID")
+        notificationManager.deleteNotificationChannel(CHANNEL_ID)
+        createNotificationChannel(context)
     }
 }

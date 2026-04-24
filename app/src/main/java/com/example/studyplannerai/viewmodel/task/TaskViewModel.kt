@@ -1,8 +1,6 @@
 package com.example.studyplannerai.viewmodel.task
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.studyplannerai.data.model.Task
 import com.example.studyplannerai.data.repository.TaskRepository
@@ -12,12 +10,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
-class TaskViewModel(
-    private val repository: TaskRepository = TaskRepository(),
+@HiltViewModel
+class TaskViewModel @Inject constructor(
+    private val repository: TaskRepository,
     private val reminderScheduler: ReminderScheduler
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow(TaskUiState())
     val uiState: StateFlow<TaskUiState> = _uiState.asStateFlow()
 
@@ -135,6 +135,7 @@ class TaskViewModel(
         _uiState.update { it.copy(message = null, errorMessage = null) }
     }
 
+
     private fun observeTasks() {
         viewModelScope.launch {
             repository.getTasks().collect { tasks ->
@@ -181,17 +182,6 @@ class TaskViewModel(
                         )
                     }
                 }
-        }
-    }
-
-    class Factory(
-        private val appContext: Context
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return TaskViewModel(
-                reminderScheduler = ReminderScheduler(appContext)
-            ) as T
         }
     }
 }

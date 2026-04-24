@@ -2,19 +2,26 @@ package com.example.studyplannerai.viewmodel.auth
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import com.example.studyplannerai.data.repository.AuthRepository
+import androidx.lifecycle.viewModelScope
+import com.example.studyplannerai.core.util.Resource
+import com.example.studyplannerai.domain.repository.AuthRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class UserProfileUiState(
     val userName: String = "",
     val userEmail: String = ""
 )
 
-class AuthViewModel : ViewModel() {
-    private val repository = AuthRepository()
+@HiltViewModel
+class AuthViewModel @Inject constructor(
+    private val repository: AuthRepository
+) : ViewModel() {
 
     private val _profileState = MutableStateFlow(UserProfileUiState())
     val profileState: StateFlow<UserProfileUiState> = _profileState.asStateFlow()
@@ -32,44 +39,51 @@ class AuthViewModel : ViewModel() {
     }
 
     private fun checkSession() {
-        val user = repository.getCurrentUser()
-        if (user != null) {
+        if (repository.isUserLoggedIn()) {
             updateUserState()
             isLoggedIn.value = true
         }
     }
 
     fun logIn(email: String, password: String) {
-        isLoading.value = true
-        errorMessage.value = null
-        successMessage.value = null
+        viewModelScope.launch {
+            isLoading.value = true
+            errorMessage.value = null
+            successMessage.value = null
 
-        repository.logIn(email = email, password = password) { success, error ->
-            isLoading.value = false
-            if (success) {
-                updateUserState(fallbackEmail = email)
-                successMessage.value = "Login Successful!"
-                isLoggedIn.value = true
-            } else {
-                errorMessage.value = error
+            when (val result = repository.logIn(email, password)) {
+                is Resource.Success -> {
+                    updateUserState(fallbackEmail = email)
+                    successMessage.value = "Login Successful!"
+                    isLoggedIn.value = true
+                }
+                is Resource.Error -> {
+                    errorMessage.value = result.message
+                }
+                is Resource.Loading -> {}
             }
+            isLoading.value = false
         }
     }
 
     fun signUp(email: String, password: String) {
-        isLoading.value = true
-        errorMessage.value = null
-        successMessage.value = null
+        viewModelScope.launch {
+            isLoading.value = true
+            errorMessage.value = null
+            successMessage.value = null
 
-        repository.signUp(email = email, password = password) { success, error ->
-            isLoading.value = false
-            if (success) {
-                updateUserState(fallbackEmail = email)
-                successMessage.value = "Signup Successful!"
-                isLoggedIn.value = true
-            } else {
-                errorMessage.value = error
+            when (val result = repository.signUp(email, password)) {
+                is Resource.Success -> {
+                    updateUserState(fallbackEmail = email)
+                    successMessage.value = "Signup Successful!"
+                    isLoggedIn.value = true
+                }
+                is Resource.Error -> {
+                    errorMessage.value = result.message
+                }
+                is Resource.Loading -> {}
             }
+            isLoading.value = false
         }
     }
 

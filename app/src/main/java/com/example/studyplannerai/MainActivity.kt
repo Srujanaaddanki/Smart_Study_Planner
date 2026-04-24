@@ -12,15 +12,24 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.studyplannerai.reminder.NotificationHelper
 import com.example.studyplannerai.ui.auth.AuthScreen
 import com.example.studyplannerai.ui.navigation.AppShell
+import com.example.studyplannerai.ui.splash.SplashScreen
 import com.example.studyplannerai.ui.theme.StudyPlannerAiTheme
 import com.example.studyplannerai.viewmodel.auth.AuthViewModel
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
+import androidx.hilt.navigation.compose.hiltViewModel
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,38 +45,20 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppNavigator() {
-    RequestNotificationPermission()
-    val authViewModel: AuthViewModel = viewModel()
+    val authViewModel: AuthViewModel = hiltViewModel()
+    var showSplash by remember { mutableStateOf(true) }
 
-    if (authViewModel.isLoggedIn.value) {
-        AppShell(authViewModel = authViewModel)
+    if (showSplash) {
+        SplashScreen(onTimeout = { showSplash = false })
     } else {
-        AuthScreen(
-            viewModel = authViewModel,
-            onNavigateHome = {}
-        )
-    }
-}
-
-@Composable
-private fun RequestNotificationPermission() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-
-    val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { }
-
-    LaunchedEffect(Unit) {
-        if (!context.hasNotificationPermission()) {
-            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        if (authViewModel.isLoggedIn.value) {
+            AppShell(authViewModel = authViewModel)
+        } else {
+            AuthScreen(
+                viewModel = authViewModel,
+                onNavigateHome = {}
+            )
         }
     }
 }
 
-private fun Context.hasNotificationPermission(): Boolean {
-    return ContextCompat.checkSelfPermission(
-        this,
-        Manifest.permission.POST_NOTIFICATIONS
-    ) == PackageManager.PERMISSION_GRANTED
-}

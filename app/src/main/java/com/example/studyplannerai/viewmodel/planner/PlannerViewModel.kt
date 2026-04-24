@@ -1,293 +1,163 @@
 package com.example.studyplannerai.viewmodel.planner
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.studyplannerai.data.model.Subject
-import com.example.studyplannerai.data.model.StudyTask
-import com.example.studyplannerai.data.repository.PlannerRepository
-import com.example.studyplannerai.domain.ScheduleGenerator
+import com.example.studyplannerai.data.model.StudyPlanItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalDate
+import com.example.studyplannerai.core.util.Resource
+import com.example.studyplannerai.domain.repository.AiRepository
+import com.example.studyplannerai.domain.repository.StudyRepository
+import com.example.studyplannerai.reminder.ReminderScheduler
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
-class PlannerViewModel(
-    private val repository: PlannerRepository = PlannerRepository(),
-    private val scheduleGenerator: ScheduleGenerator = ScheduleGenerator()
+data class PlannerUiState(
+    val isLoading: Boolean = false,
+    val studyPlan: List<StudyPlanItem> = emptyList(),
+    val temporaryPlan: List<StudyPlanItem> = emptyList(),
+    val history: List<StudyPlanItem> = emptyList(),
+    val topics: List<String> = emptyList(),
+    val selectedTopics: List<String> = emptyList(),
+    val errorMessage: String? = null,
+    val progress: Float = 0f,
+    val isPlanAccepted: Boolean = false
+)
+
+@HiltViewModel
+class PlannerViewModel @Inject constructor(
+    private val aiRepository: AiRepository,
+    private val studyRepository: StudyRepository,
+    private val reminderScheduler: ReminderScheduler
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(
-        PlannerUiState(taskDeadlineInput = LocalDate.now().plusDays(1).toString())
-    )
+    private val _uiState = MutableStateFlow(PlannerUiState())
     val uiState: StateFlow<PlannerUiState> = _uiState.asStateFlow()
 
     init {
-        observePlannerData()
+        loadSavedPlan()
     }
 
-    fun updateSubjectName(value: String) {
-        _uiState.update { it.copy(subjectNameInput = value) }
-    }
-
-    fun startEditingSubject(subject: Subject) {
-        _uiState.update {
-            it.copy(
-                editingSubjectId = subject.id,
-                subjectNameInput = subject.name
-            )
-        }
-    }
-
-    fun cancelSubjectEditing() {
-        _uiState.update {
-            it.copy(
-                editingSubjectId = null,
-                subjectNameInput = ""
-            )
-        }
-    }
-
-    fun updateSelectedSubject(subjectId: String) {
-        _uiState.update { it.copy(selectedSubjectId = subjectId) }
-    }
-
-    fun updateTaskTitle(value: String) {
-        _uiState.update { it.copy(taskTitleInput = value) }
-    }
-
-    fun updateTaskDescription(value: String) {
-        _uiState.update { it.copy(taskDescriptionInput = value) }
-    }
-
-    fun updateTaskDeadline(value: String) {
-        _uiState.update { it.copy(taskDeadlineInput = value) }
-    }
-
-    fun updateTaskEstimatedMinutes(value: String) {
-        _uiState.update { it.copy(taskEstimatedMinutesInput = value.filter { character -> character.isDigit() }) }
-    }
-
-    fun startEditingTask(task: StudyTask) {
-        _uiState.update {
-            it.copy(
-                editingTaskId = task.id,
-                selectedSubjectId = task.subjectId,
-                taskTitleInput = task.title,
-                taskDescriptionInput = task.description,
-                taskDeadlineInput = LocalDate.ofEpochDay(task.deadlineEpochDay).toString(),
-                taskEstimatedMinutesInput = task.estimatedMinutes.toString()
-            )
-        }
-    }
-
-    fun cancelTaskEditing() {
-        _uiState.update {
-            it.copy(
-                editingTaskId = null,
-                taskTitleInput = "",
-                taskDescriptionInput = "",
-                taskDeadlineInput = LocalDate.now().plusDays(1).toString(),
-                taskEstimatedMinutesInput = "60"
-            )
-        }
-    }
-
-    fun clearMessage() {
-        _uiState.update { it.copy(message = null, errorMessage = null) }
-    }
-
-    fun addSubject() {
-        val name = uiState.value.subjectNameInput.trim()
-        if (name.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Enter a subject name.") }
-            return
-        }
-
-        launchAction(
-            successMessage = if (uiState.value.editingSubjectId == null) "Subject added." else "Subject updated."
-        ) {
-            val editingSubjectId = uiState.value.editingSubjectId
-            if (editingSubjectId == null) {
-                repository.addSubject(name)
-            } else {
-                val existingSubject = uiState.value.subjects.firstOrNull { it.id == editingSubjectId }
-                    ?: throw IllegalStateException("Subject not found.")
-                repository.updateSubject(existingSubject.copy(name = name))
-            }
-            _uiState.update { state -> state.copy(subjectNameInput = "", editingSubjectId = null) }
-        }
-    }
-
-    fun addTask() {
-        val state = uiState.value
-        val subjectId = state.selectedSubjectId
-        if (subjectId.isNullOrBlank()) {
-            _uiState.update { it.copy(errorMessage = "Add a subject before creating a task.") }
-            return
-        }
-
-        val title = state.taskTitleInput.trim()
-        if (title.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Enter a task title.") }
-            return
-        }
-
-        val estimatedMinutes = state.taskEstimatedMinutesInput.toIntOrNull()
-        if (estimatedMinutes == null || estimatedMinutes <= 0) {
-            _uiState.update { it.copy(errorMessage = "Estimated minutes must be greater than 0.") }
-            return
-        }
-
-        val deadline = try {
-            LocalDate.parse(state.taskDeadlineInput.trim())
-        } catch (_: Exception) {
-            _uiState.update { it.copy(errorMessage = "Deadline must use YYYY-MM-DD format.") }
-            return
-        }
-
-        launchAction(
-            successMessage = if (state.editingTaskId == null) "Task added." else "Task updated."
-        ) {
-            val existingTask = state.tasks.firstOrNull { it.id == state.editingTaskId }
-            if (existingTask == null) {
-                repository.addTask(
-                    StudyTask(
-                        subjectId = subjectId,
-                        title = title,
-                        description = state.taskDescriptionInput.trim(),
-                        deadlineEpochDay = deadline.toEpochDay(),
-                        estimatedMinutes = estimatedMinutes,
-                        completedMinutes = 0,
-                        isCompleted = false
-                    )
-                )
-            } else {
-                val clampedCompleted = existingTask.completedMinutes.coerceAtMost(estimatedMinutes)
-                repository.updateTask(
-                    existingTask.copy(
-                        subjectId = subjectId,
-                        title = title,
-                        description = state.taskDescriptionInput.trim(),
-                        deadlineEpochDay = deadline.toEpochDay(),
-                        estimatedMinutes = estimatedMinutes,
-                        completedMinutes = clampedCompleted,
-                        isCompleted = clampedCompleted >= estimatedMinutes
-                    )
-                )
-            }
-
-            _uiState.update {
-                it.copy(
-                    editingTaskId = null,
-                    taskTitleInput = "",
-                    taskDescriptionInput = "",
-                    taskDeadlineInput = LocalDate.now().plusDays(1).toString(),
-                    taskEstimatedMinutesInput = "60"
-                )
-            }
-        }
-    }
-
-    fun deleteSubject(subjectId: String) {
-        launchAction(successMessage = "Subject removed.") {
-            repository.deleteSubject(subjectId)
-            if (_uiState.value.editingSubjectId == subjectId) {
-                cancelSubjectEditing()
-            }
-        }
-    }
-
-    fun changeTaskProgress(task: StudyTask, deltaMinutes: Int) {
-        launchAction {
-            repository.updateTaskProgress(task, task.completedMinutes + deltaMinutes)
-        }
-    }
-
-    fun toggleTaskCompletion(task: StudyTask, completed: Boolean) {
-        launchAction {
-            repository.setTaskCompletion(task, completed)
-        }
-    }
-
-    fun deleteTask(taskId: String) {
-        launchAction(successMessage = "Task removed.") {
-            repository.deleteTask(taskId)
-            if (_uiState.value.editingTaskId == taskId) {
-                cancelTaskEditing()
-            }
-        }
-    }
-
-    fun applyReschedule() {
-        val suggestedDeadlines = uiState.value.suggestedDeadlines
-        if (suggestedDeadlines.isEmpty()) {
-            _uiState.update { it.copy(message = "No overdue tasks need rescheduling.") }
-            return
-        }
-
-        launchAction(successMessage = "Overdue tasks rescheduled.") {
-            repository.applySuggestedDeadlines(suggestedDeadlines)
-        }
-    }
-
-    private fun observePlannerData() {
+    fun loadSavedPlan() {
         viewModelScope.launch {
-            combine(
-                repository.observeSubjects(),
-                repository.observeTasks()
-            ) { subjects, tasks ->
-                val plan = scheduleGenerator.generate(tasks = tasks, subjects = subjects)
-                val selectedSubjectId = _uiState.value.selectedSubjectId
-                val validSelectedSubjectId = when {
-                    subjects.isEmpty() -> null
-                    selectedSubjectId != null && subjects.any { it.id == selectedSubjectId } -> selectedSubjectId
-                    else -> subjects.first().id
-                }
-
-                _uiState.update { current ->
-                    current.copy(
-                        isLoading = false,
-                        subjects = subjects,
-                        tasks = tasks,
-                        schedule = plan.blocks,
-                        progressSummary = ProgressSummary.from(tasks),
-                        suggestedDeadlines = plan.suggestedDeadlines,
-                        selectedSubjectId = validSelectedSubjectId
-                    )
-                }
-            }.collect {}
+            _uiState.update { it.copy(isLoading = true) }
+            when (val result = studyRepository.getSavedPlan()) {
+                is Resource.Success -> updatePlanAndProgress(result.data ?: emptyList())
+                is Resource.Error -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Loading -> {}
+            }
         }
     }
 
-    private fun launchAction(
-        successMessage: String? = null,
-        action: suspend () -> Unit
+    fun getTopics(subject: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            when (val result = aiRepository.getTopicsForSubject(subject)) {
+                is Resource.Success -> _uiState.update { it.copy(isLoading = false, topics = result.data ?: emptyList()) }
+                is Resource.Error -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Loading -> {}
+            }
+        }
+    }
+
+    fun generateFinalSchedule(
+        subject: String,
+        selectedTopics: List<String>
     ) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true, errorMessage = null, message = null) }
-            runCatching { action() }
-                .onSuccess {
-                    _uiState.update { it.copy(isSaving = false, message = successMessage) }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, isPlanAccepted = false, selectedTopics = selectedTopics) }
+            when (val result = aiRepository.generateSchedule(selectedTopics, 4, "Flexible", 15)) {
+                is Resource.Success -> {
+                    val plan = (result.data ?: emptyList()).map { it.copy(planId = subject) }
+                    _uiState.update { it.copy(isLoading = false, temporaryPlan = plan) }
                 }
-                .onFailure { throwable ->
-                    _uiState.update {
-                        it.copy(
-                            isSaving = false,
-                            errorMessage = throwable.message ?: "Something went wrong."
-                        )
-                    }
-                }
+                is Resource.Error -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Loading -> {}
+            }
         }
     }
 
-    class Factory : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return PlannerViewModel() as T
+    fun acceptPlan() {
+        viewModelScope.launch {
+            val planToSave = _uiState.value.temporaryPlan
+            if (planToSave.isEmpty()) return@launch
+            
+            _uiState.update { it.copy(isLoading = true) }
+            when (val result = studyRepository.savePlan(planToSave)) {
+                is Resource.Success -> {
+                    updatePlanAndProgress(planToSave)
+                    _uiState.update { it.copy(temporaryPlan = emptyList(), isPlanAccepted = true) }
+                    
+                    // Schedule reminders for each task
+                    planToSave.forEach { item ->
+                        // Note: In a real app, you'd convert day/time_slot to a Long timestamp.
+                        // For this demo, we'll assume the scheduler handles it or we'll add a helper later.
+                        // reminderScheduler.schedule(item.toTask()) 
+                    }
+                }
+                is Resource.Error -> _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                is Resource.Loading -> {}
+            }
+        }
+    }
+
+    fun regeneratePlan(subject: String) {
+        generateFinalSchedule(subject, _uiState.value.selectedTopics)
+    }
+
+    fun toggleTaskCompletion(item: StudyPlanItem) {
+        viewModelScope.launch {
+            val isCompleted = !item.isCompleted
+            when (val result = studyRepository.updateTaskStatus(item.id, isCompleted)) {
+                is Resource.Success -> {
+                    loadSavedPlan() // Refresh lists
+                }
+                is Resource.Error -> _uiState.update { it.copy(errorMessage = result.message) }
+                is Resource.Loading -> {}
+            }
+        }
+    }
+
+    fun deleteSingleTask(taskId: String) {
+        viewModelScope.launch {
+            studyRepository.deleteTask(taskId)
+            loadSavedPlan()
+        }
+    }
+
+    fun addCustomTask(day: String, title: String, topic: String, duration: Int) {
+        viewModelScope.launch {
+            val newTask = StudyPlanItem(
+                id = "${System.currentTimeMillis()}",
+                day = day,
+                time_slot = "Custom",
+                duration_minutes = duration,
+                topic = topic,
+                task = title,
+                status = "pending"
+            )
+            val currentPlan = _uiState.value.studyPlan.toMutableList()
+            currentPlan.add(newTask)
+            studyRepository.savePlan(listOf(newTask))
+            updatePlanAndProgress(currentPlan)
+        }
+    }
+
+    private fun updatePlanAndProgress(plan: List<StudyPlanItem>) {
+        val activeTasks = plan.filter { !it.isCompleted && it.status != "completed" }
+        val completedCount = plan.count { it.isCompleted || it.status == "completed" }
+        val totalCount = plan.size
+        val progress = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
+        
+        _uiState.update { 
+            it.copy(
+                isLoading = false, 
+                studyPlan = activeTasks.sortedBy { p -> p.day },
+                progress = progress
+            ) 
         }
     }
 }

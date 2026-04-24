@@ -99,8 +99,8 @@ fun TaskEditorFields(
 ) {
     val context = LocalContext.current
     val zoneId = ZoneId.systemDefault()
-    val dateFormatter = DateTimeFormatter.ofPattern("MMM d")
-    val dateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, h:mm a")
+    val dateFormatter = DateTimeFormatter.ofPattern("d MMM")
+    val reminderFormatter = DateTimeFormatter.ofPattern("d MMM, h:mm a")
 
     fun showDeadlinePicker() {
         val initialDate = deadlineMillis?.toLocalDate(zoneId) ?: LocalDate.now()
@@ -119,29 +119,36 @@ fun TaskEditorFields(
         ).show()
     }
 
-    fun showReminderPicker() {
-        val initialDateTime = reminderMillis?.toLocalDateTime(zoneId) ?: LocalDateTime.now().plusHours(1)
-
+    fun showReminderDatePicker() {
+        val currentDateTime = reminderMillis?.toLocalDateTime(zoneId) ?: LocalDateTime.now().plusHours(1)
         DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
-                TimePickerDialog(
-                    context,
-                    { _, hourOfDay, minute ->
-                        val selected = LocalDateTime.of(year, month + 1, dayOfMonth, hourOfDay, minute)
-                            .atZone(zoneId)
-                            .toInstant()
-                            .toEpochMilli()
-                        onReminderChange(selected)
-                    },
-                    initialDateTime.hour,
-                    initialDateTime.minute,
-                    false
-                ).show()
+                val newDateTime = currentDateTime
+                    .withYear(year)
+                    .withMonth(month + 1)
+                    .withDayOfMonth(dayOfMonth)
+                onReminderChange(newDateTime.atZone(zoneId).toInstant().toEpochMilli())
             },
-            initialDateTime.year,
-            initialDateTime.monthValue - 1,
-            initialDateTime.dayOfMonth
+            currentDateTime.year,
+            currentDateTime.monthValue - 1,
+            currentDateTime.dayOfMonth
+        ).show()
+    }
+
+    fun showReminderTimePicker() {
+        val currentDateTime = reminderMillis?.toLocalDateTime(zoneId) ?: LocalDateTime.now().plusHours(1)
+        TimePickerDialog(
+            context,
+            { _, hourOfDay, minute ->
+                val newDateTime = currentDateTime
+                    .withHour(hourOfDay)
+                    .withMinute(minute)
+                onReminderChange(newDateTime.atZone(zoneId).toInstant().toEpochMilli())
+            },
+            currentDateTime.hour,
+            currentDateTime.minute,
+            false
         ).show()
     }
 
@@ -169,9 +176,27 @@ fun TaskEditorFields(
         OutlinedButton(onClick = { showDeadlinePicker() }) {
             Text(deadlineMillis?.let { "Date: ${it.toLocalDate(zoneId).format(dateFormatter)}" } ?: "Pick Date")
         }
-        OutlinedButton(onClick = { showReminderPicker() }) {
-            Text(reminderMillis?.let { "Reminder: ${it.toLocalDateTime(zoneId).format(dateTimeFormatter)}" } ?: "Set Reminder")
+        
+        OutlinedButton(onClick = { showReminderDatePicker() }) {
+            Text(reminderMillis?.let { "Reminder: ${it.toLocalDateTime(zoneId).format(dateFormatter)}" } ?: "Set Reminder Date")
         }
+
+        OutlinedButton(onClick = { showReminderTimePicker() }) {
+            val timeText = reminderMillis?.let { 
+                it.toLocalDateTime(zoneId).format(DateTimeFormatter.ofPattern("h:mm a")) 
+            } ?: "Set Time"
+            Text("Time: $timeText")
+        }
+
+        if (reminderMillis != null) {
+            Text(
+                text = "Full Reminder: ${reminderMillis.toLocalDateTime(zoneId).format(reminderFormatter)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            )
+        }
+
         if (deadlineMillis != null) {
             OutlinedButton(onClick = { onDeadlineChange(null) }) {
                 Text("Clear Date")

@@ -10,7 +10,8 @@ data class TaskUiState(
     val taskUpdatedEvent: Int = 0,
     val taskDeletedEvent: Int = 0,
     val message: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val studyBlocks: List<com.example.studyplannerai.data.model.PlannedStudyBlock> = emptyList()
 ) {
     val totalTasks: Int
         get() = tasks.size

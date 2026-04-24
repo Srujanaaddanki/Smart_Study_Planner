@@ -7,7 +7,8 @@ import kotlinx.coroutines.flow.callbackFlow
 
 data class UserSettings(
     val weeklyViewEnabled: Boolean = true,
-    val autoRescheduleEnabled: Boolean = true
+    val autoRescheduleEnabled: Boolean = true,
+    val isPermissionRequested: Boolean = false
 )
 
 class SettingsRepository(context: Context) {
@@ -34,10 +35,15 @@ class SettingsRepository(context: Context) {
         preferences.edit().putBoolean(KEY_AUTO_RESCHEDULE, enabled).apply()
     }
 
+    suspend fun updatePermissionRequested(requested: Boolean) {
+        preferences.edit().putBoolean(KEY_PERMISSION_REQUESTED, requested).apply()
+    }
+
     private fun readSettings(): UserSettings {
         return UserSettings(
             weeklyViewEnabled = preferences.getBoolean(KEY_WEEKLY_VIEW, true),
-            autoRescheduleEnabled = preferences.getBoolean(KEY_AUTO_RESCHEDULE, true)
+            autoRescheduleEnabled = preferences.getBoolean(KEY_AUTO_RESCHEDULE, true),
+            isPermissionRequested = preferences.getBoolean(KEY_PERMISSION_REQUESTED, false)
         )
     }
 
@@ -45,5 +51,6 @@ class SettingsRepository(context: Context) {
         const val PREFS_NAME = "study_planner_settings"
         const val KEY_WEEKLY_VIEW = "weekly_view_enabled"
         const val KEY_AUTO_RESCHEDULE = "auto_reschedule_enabled"
+        const val KEY_PERMISSION_REQUESTED = "permission_requested"
     }
 }

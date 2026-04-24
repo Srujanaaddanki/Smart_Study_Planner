@@ -46,15 +46,24 @@ class ScheduleGenerator {
                     for (offset in 0 until totalDays) {
                         if (remainingMinutes <= 0 || offset >= horizonDays) break
                         val plannedMinutes = minOf(minutesPerDay, remainingMinutes)
+                        val currentDay = today.plusDays(offset)
+                        val startMillis = currentDay.atTime(9, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        val endMillis = startMillis + (plannedMinutes * 60000L)
+                        val subject = subjectLookup[task.subjectId]
+
                         add(
                             PlannedStudyBlock(
                                 taskId = task.id,
                                 taskTitle = task.title,
-                                subjectName = subjectLookup[task.subjectId]?.name ?: "Unknown subject",
-                                dateEpochDay = today.plusDays(offset).toEpochDay(),
+                                subjectName = subject?.name ?: "Unknown subject",
+                                subjectColor = subject?.colorHex ?: "#6200EE",
+                                dateEpochDay = currentDay.toEpochDay(),
+                                startTime = startMillis,
+                                endTime = endMillis,
                                 plannedMinutes = plannedMinutes,
                                 suggestedDeadlineEpochDay = effectiveDeadline.toEpochDay(),
-                                isRescheduled = effectiveDeadline != originalDeadline
+                                isRescheduled = effectiveDeadline != originalDeadline,
+                                status = "Pending"
                             )
                         )
                         remainingMinutes -= plannedMinutes

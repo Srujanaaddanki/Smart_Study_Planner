@@ -11,9 +11,11 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
-class TaskRepository(
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+import javax.inject.Inject
+
+class TaskRepository @Inject constructor(
+    private val auth: FirebaseAuth,
+    private val firestore: FirebaseFirestore
 ) {
 
     fun getTasks(): Flow<List<Task>> = callbackFlow {
@@ -30,10 +32,12 @@ class TaskRepository(
                         Task(
                             id = document.id,
                             title = document.getString("title").orEmpty(),
+                            subjectId = document.getString("subjectId").orEmpty(),
                             subject = document.getString("subject").orEmpty(),
                             deadline = document.getLong("deadline"),
                             reminderTime = document.getLong("reminderTime"),
                             isCompleted = document.getBoolean("isCompleted") ?: false,
+                            estimatedMinutes = document.getLong("estimatedMinutes")?.toInt() ?: 60,
                             createdAt = document.getLong("createdAt") ?: 0L,
                             updatedAt = document.getLong("updatedAt") ?: 0L
                         )
@@ -90,10 +94,12 @@ class TaskRepository(
 
     private fun Task.toMap(): Map<String, Any?> = mapOf(
         "title" to title,
+        "subjectId" to subjectId,
         "subject" to subject,
         "deadline" to deadline,
         "reminderTime" to reminderTime,
         "isCompleted" to isCompleted,
+        "estimatedMinutes" to estimatedMinutes,
         "createdAt" to createdAt,
         "updatedAt" to updatedAt
     )

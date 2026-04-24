@@ -8,8 +8,11 @@ import android.os.Build
 import android.util.Log
 import com.example.studyplannerai.data.model.Task
 
-class ReminderScheduler(
-    private val context: Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+
+class ReminderScheduler @Inject constructor(
+    @ApplicationContext private val context: Context
 ) {
 
     fun schedule(task: Task) {
