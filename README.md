@@ -74,6 +74,7 @@ Contributions are welcome! Please feel free to submit a Pull Request or open an 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+ 
 ---
-Built with ❤️ by [Gowthami](https://github.com/Gowthami1214)
+Built with ❤️ by [Srujana (https://github.com/Srujanaaddanki) & Gowthami]
+
